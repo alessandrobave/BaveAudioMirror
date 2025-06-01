@@ -4,18 +4,20 @@ using System.Threading;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
 
+
 class AudioMirror
 {
     private static WasapiLoopbackCapture capture;
-    private static WaveOutEvent waveOut;
+    private static WasapiOut waveOut;
     private static BufferedWaveProvider buffer;
     private static float currentVolume = 0f;
     private static bool isRunning = true;
 
     static void Main(string[] args)
     {
-        Console.WriteLine("Bave Audio Mirror Tool");
-        Console.WriteLine("================");
+        Console.WriteLine("===============================");
+        Console.WriteLine("    Bave Audio Mirror Tool");
+        Console.WriteLine("===============================");
 
         try
         {
@@ -46,15 +48,10 @@ class AudioMirror
             capture = new WasapiLoopbackCapture();
 
             // Setup output to selected device
-            waveOut = new WaveOutEvent();
-            waveOut.DeviceNumber = deviceIndex;
+            waveOut = new WasapiOut(targetDevice, AudioClientShareMode.Shared, true, 1);
 
             // Create buffer for audio data
-            buffer = new BufferedWaveProvider(capture.WaveFormat)
-            {
-                BufferLength = 1024 * 1024, // 1MB buffer
-                DiscardOnBufferOverflow = true
-            };
+            buffer = new BufferedWaveProvider(capture.WaveFormat);
 
             // Handle captured audio data
             capture.DataAvailable += (sender, e) =>
