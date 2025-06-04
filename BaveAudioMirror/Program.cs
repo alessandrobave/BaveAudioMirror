@@ -1,7 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Threading;
-using NAudio.Wave;
+﻿using NAudio.Wave;
 using NAudio.CoreAudioApi;
 
 
@@ -57,20 +54,12 @@ class AudioMirror
             capture.DataAvailable += (sender, e) =>
             {
                 buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-                currentVolume = CalculateLevel(e.Buffer, e.BytesRecorded);
             };
 
             // Start capture and playback
             waveOut.Init(buffer);
             capture.StartRecording();
             waveOut.Play();
-
-            // Start VU meter thread
-            Thread vuMeterThread = new Thread(ShowVuMeter)
-            {
-                IsBackground = true
-            };
-            vuMeterThread.Start();
 
             // Wait for user input to stop
             Console.ReadKey();
@@ -87,104 +76,6 @@ class AudioMirror
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
-        }
-    }
-
-    private static float CalculateLevel(byte[] buffer, int bytesRecorded)
-    {
-        // Peak detection only for maximum responsiveness
-        double peakValue = 0;
-        
-        for (int i = 0; i < bytesRecorded; i += 2)
-        {
-            if (i + 1 < bytesRecorded)
-            {
-                short sample = (short)((buffer[i + 1] << 8) | buffer[i]);
-                double normalizedSample = Math.Abs(sample / 32768.0);
-                
-                // Track peak only
-                if (normalizedSample > peakValue)
-                    peakValue = normalizedSample;
-            }
-        }
-        
-        // Minimum threshold to reduce background noise
-        if (peakValue < 0.006) return 0;
-        
-        // Tuned curve for peak detection
-        return (float)Math.Min(1.0, Math.Pow(peakValue * 4.5, 0.65));
-    }
-
-    private static void ShowVuMeter()
-    {
-        const int meterWidth = 50;
-        float lastPeakValue = 0;
-        int peakHoldTime = 0;
-        const int peakHoldDuration = 8; // Even shorter hold time for peak display
-        float smoothedVolume = 0;
-        
-        while (isRunning)
-        {
-            // Minimal smoothing for ultra-fast response
-            smoothedVolume = smoothedVolume * 0.3f + currentVolume * 0.7f;
-            
-            // Calculate number of blocks to display
-            int barSize = (int)(smoothedVolume * meterWidth);
-            
-            // Peak management with faster decay
-            if (smoothedVolume >= lastPeakValue)
-            {
-                lastPeakValue = smoothedVolume;
-                peakHoldTime = peakHoldDuration;
-            }
-            else if (peakHoldTime > 0)
-            {
-                peakHoldTime--;
-            }
-            else
-            {
-                lastPeakValue = Math.Max(0, lastPeakValue - 0.04f); // Even faster decay
-            }
-            
-            int peakPosition = (int)(lastPeakValue * meterWidth);
-            
-            // Build VU meter bar with color gradient
-            Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write("PEAK: [");
-            
-            for (int i = 0; i < meterWidth; i++)
-            {
-                if (i < barSize)
-                {
-                    if (i < meterWidth * 0.6)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                    }
-                    else if (i < meterWidth * 0.8)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                    }
-                    else
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                    }
-                    Console.Write("█");
-                }
-                else if (i == peakPosition)
-                {
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.Write("▌");
-                }
-                else
-                {
-                    Console.Write(" ");
-                }
-            }
-            
-            Console.ResetColor();
-            Console.Write($"] {smoothedVolume:F2}   ");
-            
-            Thread.Sleep(16); // Even faster update rate (~60fps)
         }
     }
 }
