@@ -1,13 +1,13 @@
 ﻿using NAudio.Wave;
 using NAudio.CoreAudioApi;
-
+using NAudio.Dsp;
+using BaveAudioMirror;
 
 class AudioMirror
 {
     private static WasapiLoopbackCapture capture;
     private static WasapiOut waveOut;
     private static BufferedWaveProvider buffer;
-    private static float currentVolume = 0f;
     private static bool isRunning = true;
 
     static void Main(string[] args)
@@ -21,6 +21,11 @@ class AudioMirror
             // List available output devices
             var enumerator = new MMDeviceEnumerator();
             var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+            audioMirrorSettings currentSettings = new audioMirrorSettings(); // Initialize settings
+
+
+            BiQuadFilter biquadFilter = BiQuadFilter.LowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
+            
 
             Console.WriteLine("\nAvailable output devices:");
             for (int i = 0; i < devices.Count; i++)
@@ -49,7 +54,6 @@ class AudioMirror
 
             // Create buffer for audio data
             buffer = new BufferedWaveProvider(capture.WaveFormat);
-            //buffer = new BufferedWaveProvider(targetDevice.AudioClient.MixFormat);
 
             // Handle captured audio data
             capture.DataAvailable += (sender, e) =>
@@ -60,6 +64,7 @@ class AudioMirror
             // Start capture and playback
             waveOut.Init(buffer);
             capture.StartRecording();
+            waveOut.Volume = currentSettings.Volume; // Set initial volume
             waveOut.Play();
 
             // Wait for user input to stop
@@ -67,22 +72,141 @@ class AudioMirror
 
             // If users click arrow up or down, adjust volume
             ConsoleKeyInfo keyInfo;
+            int volumeLinePosition = Console.CursorTop;
+            Console.WriteLine("Volume: 0%");  // Initial display
+            int filterLinePosition = volumeLinePosition + 1;
+
             while (isRunning && (keyInfo = Console.ReadKey(true)).Key != ConsoleKey.Escape)
             {
+                // Change volume
                 if (keyInfo.Key == ConsoleKey.UpArrow)
                 {
-                    currentVolume = Math.Min(currentVolume + 0.1f, 1.0f);
-                    waveOut.Volume = currentVolume;
-                    Console.WriteLine($"Volume increased to: {currentVolume * 100}%");
+                    currentSettings.Volume = Math.Min(currentSettings.Volume + 0.1f, 1.0f);
+                    waveOut.Volume = currentSettings.Volume;
+                    Console.SetCursorPosition(0, volumeLinePosition);
+                    Console.Write($"Volume: {currentSettings.Volume * 100:F0}%        ");  // Extra spaces to clear previous text
                 }
                 else if (keyInfo.Key == ConsoleKey.DownArrow)
                 {
-                    currentVolume = Math.Max(currentVolume - 0.1f, 0.0f);
-                    waveOut.Volume = currentVolume;
-                    Console.WriteLine($"Volume decreased to: {currentVolume * 100}%");
+                    currentSettings.Volume = Math.Max(currentSettings.Volume - 0.1f, 0.0f);
+                    waveOut.Volume = currentSettings.Volume;
+                    Console.SetCursorPosition(0, volumeLinePosition);
+                    Console.Write($"Volume: {currentSettings.Volume * 100:F0}%        ");  // Extra spaces to clear previous text
                 }
-            }
 
+                // Change frequency
+                else if (keyInfo.Key == ConsoleKey.RightArrow)
+                {
+                    // Increase filter frequency by 10 Hz
+                    currentSettings.StartFilterFrequency += 10;
+                    biquadFilter.SetLowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
+                    Console.SetCursorPosition(0, filterLinePosition);
+                    Console.Write($"Filter: {currentSettings.StartFilterFrequency}hz        ");
+                }
+                else if (keyInfo.Key == ConsoleKey.LeftArrow)
+                {
+                    // Decrease filter frequency by 10 Hz
+                    currentSettings.StartFilterFrequency = Math.Max(10, currentSettings.StartFilterFrequency - 10); // Prevent negative frequency
+                    biquadFilter.SetLowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
+                    Console.SetCursorPosition(0, filterLinePosition);
+                    Console.Write($"Filter: {currentSettings.StartFilterFrequency}hz        ");
+                }
+
+                // Change q factor
+                else if (keyInfo.Key == ConsoleKey.PageDown)
+                {
+                    currentSettings.FilterQ = Math.Max(0.01f, currentSettings.FilterQ - 0.05f); // Prevent negative Q factor
+                    biquadFilter.SetLowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
+                    Console.SetCursorPosition(0, filterLinePosition);
+                    Console.Write($"Filter Q: {currentSettings.FilterQ:F2}             ");
+                }
+                else if (keyInfo.Key == ConsoleKey.PageUp)
+                {
+                    currentSettings.FilterQ += 0.05f; // Increase Q factor
+                    biquadFilter.SetLowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
+                    Console.SetCursorPosition(0, filterLinePosition);
+                    Console.Write($"Filter Q: {currentSettings.FilterQ:F2}               ");
+                }
+
+                // if user press "l" disable filter
+                else if (keyInfo.Key == ConsoleKey.L)
+                {
+                    if (!currentSettings.IsFilterEnabled)
+                    {
+                        currentSettings.IsFilterEnabled = true;
+
+                        // Cleanup
+                        capture?.StopRecording();
+                        waveOut?.Stop();
+                        capture?.Dispose();
+                        waveOut?.Dispose();
+
+                        // Setup loopback capture (captures system audio)
+                        capture = new WasapiLoopbackCapture();
+
+                        // Setup output to selected device
+                        waveOut = new WasapiOut(targetDevice, AudioClientShareMode.Shared, true, 5);
+
+                        // Create buffer for audio data
+                        buffer = new BufferedWaveProvider(capture.WaveFormat);
+
+                        // Handle captured audio data
+                        capture.DataAvailable += (sender, e) =>
+                        {
+                            buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                        };
+
+                        // Apply BiQuad filter to the audio
+                        ISampleProvider sampleProvider = buffer.ToSampleProvider();
+                        BiQuadFilterProvider filteredProvider = new BiQuadFilterProvider(sampleProvider, biquadFilter);
+
+                        // Start capture and playback
+                        waveOut.Init(filteredProvider);
+                        capture.StartRecording();
+                        waveOut.Play();
+
+                        Console.SetCursorPosition(0, filterLinePosition);
+                        Console.Write("Filter: LowPass Filter Enabled     ");
+                    }
+
+                    else
+                    {
+                        currentSettings.IsFilterEnabled = false;
+                        // Cleanup
+                        capture?.StopRecording();
+                        waveOut?.Stop();
+                        capture?.Dispose();
+                        waveOut?.Dispose();
+                        // Setup loopback capture (captures system audio)
+                        capture = new WasapiLoopbackCapture();
+                        // Setup output to selected device
+                        waveOut = new WasapiOut(targetDevice, AudioClientShareMode.Shared, true, 5);
+                        // Create buffer for audio data
+                        buffer = new BufferedWaveProvider(capture.WaveFormat);
+                        // Handle captured audio data
+                        capture.DataAvailable += (sender, e) =>
+                        {
+                            buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                        };
+                        // Start capture and playback
+                        waveOut.Init(buffer);
+                        capture.StartRecording();
+                        waveOut.Play();
+                        Console.SetCursorPosition(0, filterLinePosition);
+                        Console.Write("Filter: LowPass Filter Disabled     ");
+
+                    }
+
+
+                }
+
+
+                else if (keyInfo.Key == ConsoleKey.Q || keyInfo.Key == ConsoleKey.E)
+                {
+                    break; // Exit on Q or E key
+                }
+
+            }
 
             isRunning = false;
 
@@ -100,3 +224,45 @@ class AudioMirror
         }
     }
 }
+
+// Helper class to create a BiQuadFilter provider
+public class BiQuadFilterProvider : ISampleProvider
+{
+    private readonly ISampleProvider source;
+    private readonly BiQuadFilter filter;
+
+    public BiQuadFilterProvider(ISampleProvider source, BiQuadFilter filter)
+    {
+        this.source = source;
+        this.filter = filter;
+    }
+
+    public WaveFormat WaveFormat => source.WaveFormat;
+
+    public int Read(float[] buffer, int offset, int count)
+    {
+        int samplesRead = source.Read(buffer, offset, count);
+        
+        // Apply filter
+        for (int i = 0; i < samplesRead; i++)
+        {
+            buffer[offset + i] = filter.Transform(buffer[offset + i]);
+        }
+        
+        return samplesRead;
+    }
+}
+
+public class audioMirrorSettings
+{
+    // Settings for the audio mirror tool can be added here
+    public int StartFilterFrequency { get; set; } = 100; // Default filter frequency
+    public float FilterQ { get; set; } = 0.15f; // Default filter Q factor
+    public bool IsFilterEnabled { get; set; } = false; // Initial filter state
+    public float Volume { get; set; } = 0.5f; // Default volume level
+
+}
+
+
+
+
