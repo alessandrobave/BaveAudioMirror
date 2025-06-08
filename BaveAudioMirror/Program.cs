@@ -49,6 +49,7 @@ class AudioMirror
 
             // Create buffer for audio data
             buffer = new BufferedWaveProvider(capture.WaveFormat);
+            //buffer = new BufferedWaveProvider(targetDevice.AudioClient.MixFormat);
 
             // Handle captured audio data
             capture.DataAvailable += (sender, e) =>
@@ -63,6 +64,26 @@ class AudioMirror
 
             // Wait for user input to stop
             Console.ReadKey();
+
+            // If users click arrow up or down, adjust volume
+            ConsoleKeyInfo keyInfo;
+            while (isRunning && (keyInfo = Console.ReadKey(true)).Key != ConsoleKey.Escape)
+            {
+                if (keyInfo.Key == ConsoleKey.UpArrow)
+                {
+                    currentVolume = Math.Min(currentVolume + 0.1f, 1.0f);
+                    waveOut.Volume = currentVolume;
+                    Console.WriteLine($"Volume increased to: {currentVolume * 100}%");
+                }
+                else if (keyInfo.Key == ConsoleKey.DownArrow)
+                {
+                    currentVolume = Math.Max(currentVolume - 0.1f, 0.0f);
+                    waveOut.Volume = currentVolume;
+                    Console.WriteLine($"Volume decreased to: {currentVolume * 100}%");
+                }
+            }
+
+
             isRunning = false;
 
             // Cleanup
