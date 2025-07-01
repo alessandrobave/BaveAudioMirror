@@ -46,8 +46,8 @@ The **Bave Audio Mirror Tool** captures the system's audio output (what you hear
 
 1.  **Clone the repository or download the source code.**
     ```bash
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone https://github.com/alessandrobave/BaveAudioMirror.git
+    cd BaveAudioMirror
     ```
 2.  **Restore NuGet packages:** If you have the project file (`.csproj`), navigate to the project directory in your terminal and run:
     ```bash
