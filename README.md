@@ -53,13 +53,6 @@ The **Bave Audio Mirror Tool** captures the system's audio output (what you hear
     ```bash
     dotnet restore
     ```
-    This will download and install NAudio if it's listed in the project file. If you only have the `.cs` file, you'll need to create a new console project and add NAudio:
-    ```bash
-    dotnet new console -n AudioMirrorApp
-    cd AudioMirrorApp
-    dotnet add package NAudio
-    # Then replace the generated Program.cs content with the provided code.
-    ```
 3.  **Build the application:**
     ```bash
     dotnet build
