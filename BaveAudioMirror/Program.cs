@@ -13,7 +13,7 @@ class AudioMirror
     static void Main(string[] args)
     {
         Console.WriteLine("===============================");
-        Console.WriteLine("    Bave Audio Mirror Tool");
+        Console.WriteLine("    Bave Audio Mirror Tool     ");
         Console.WriteLine("===============================");
 
         try
@@ -23,9 +23,40 @@ class AudioMirror
             var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
             audioMirrorSettings currentSettings = new audioMirrorSettings(); // Initialize settings
 
+            // --- PARSING ARGOMENTS ---
+            string? deviceName = null;
+            float? volumeArg = null;
+            bool enableLowpass = false;
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--device" && i + 1 < args.Length)
+                {
+                    deviceName = args[i + 1];
+                    i++;
+                }
+                else if (args[i] == "--volume" && i + 1 < args.Length)
+                {
+                    if (float.TryParse(args[i + 1], out float v))
+                    {
+                        volumeArg = Math.Clamp(v, 0f, 1f);
+                        Console.WriteLine($"Volume set to: {volumeArg.Value * 100:F0}%");
+                    }
+                    i++;
+                }
+                else if (args[i] == "--lowpass")
+                {
+                    enableLowpass = true;
+                    Console.WriteLine("Low-pass filter enabled.");
+                }
+            }
+
+            if (volumeArg.HasValue)
+                currentSettings.Volume = volumeArg.Value;
+            if (enableLowpass)
+                currentSettings.IsFilterEnabled = true;
 
             BiQuadFilter biquadFilter = BiQuadFilter.LowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
-            
 
             Console.WriteLine("\nAvailable output devices:");
             for (int i = 0; i < devices.Count; i++)
@@ -33,13 +64,34 @@ class AudioMirror
                 Console.WriteLine($"{i}: {devices[i].FriendlyName}");
             }
 
-            // Get user choice
-            Console.Write("\nSelect target device (number): ");
-            if (!int.TryParse(Console.ReadLine(), out int deviceIndex) ||
-                deviceIndex < 0 || deviceIndex >= devices.Count)
+            int deviceIndex = -1;
+            if (!string.IsNullOrEmpty(deviceName))
             {
-                Console.WriteLine("Invalid device selection.");
-                return;
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    if (devices[i].FriendlyName.Contains(deviceName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        deviceIndex = i;
+                        break;
+                    }
+                }
+                if (deviceIndex == -1)
+                {
+                    Console.WriteLine($"Device '{deviceName}' not found.");
+                    return;
+                }
+                Console.WriteLine($"\nSelected device via --device: {devices[deviceIndex].FriendlyName}");
+            }
+            else
+            {
+                // Get user choice
+                Console.Write("\nSelect target device (number): ");
+                if (!int.TryParse(Console.ReadLine(), out deviceIndex) ||
+                    deviceIndex < 0 || deviceIndex >= devices.Count)
+                {
+                    Console.WriteLine("Invalid device selection.");
+                    return;
+                }
             }
 
             var targetDevice = devices[deviceIndex];
