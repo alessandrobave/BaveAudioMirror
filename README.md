@@ -46,19 +46,12 @@ The **Bave Audio Mirror Tool** captures the system's audio output (what you hear
 
 1.  **Clone the repository or download the source code.**
     ```bash
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone https://github.com/alessandrobave/BaveAudioMirror.git
+    cd BaveAudioMirror
     ```
 2.  **Restore NuGet packages:** If you have the project file (`.csproj`), navigate to the project directory in your terminal and run:
     ```bash
     dotnet restore
-    ```
-    This will download and install NAudio if it's listed in the project file. If you only have the `.cs` file, you'll need to create a new console project and add NAudio:
-    ```bash
-    dotnet new console -n AudioMirrorApp
-    cd AudioMirrorApp
-    dotnet add package NAudio
-    # Then replace the generated Program.cs content with the provided code.
     ```
 3.  **Build the application:**
     ```bash
