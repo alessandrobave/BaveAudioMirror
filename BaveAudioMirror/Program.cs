@@ -23,7 +23,7 @@ class AudioMirror
             var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
             audioMirrorSettings currentSettings = new audioMirrorSettings(); // Initialize settings
 
-            // --- PARSING ARGOMENTS ---
+            //PARSING ARGUMENTS
             string? deviceName = null;
             float? volumeArg = null;
             bool enableLowpass = false;
@@ -58,11 +58,16 @@ class AudioMirror
 
             BiQuadFilter biquadFilter = BiQuadFilter.LowPassFilter(44100, currentSettings.StartFilterFrequency, currentSettings.FilterQ);
 
+
+
+            // Display available devices
             Console.WriteLine("\nAvailable output devices:");
             for (int i = 0; i < devices.Count; i++)
             {
                 Console.WriteLine($"{i}: {devices[i].FriendlyName}");
             }
+            Console.WriteLine($"IP: UDP Sender");
+            Console.WriteLine($"CL: UDP Client");
 
             int deviceIndex = -1;
             if (!string.IsNullOrEmpty(deviceName))
@@ -86,7 +91,52 @@ class AudioMirror
             {
                 // Get user choice
                 Console.Write("\nSelect target device (number): ");
-                if (!int.TryParse(Console.ReadLine(), out deviceIndex) ||
+                string selection = Console.ReadLine();
+
+                if (selection.ToUpper().StartsWith("IP"))
+                {
+                    // Handle UDP Streamer
+                    Console.WriteLine("UDP Streamer selected, parsing IP");
+                    string ipAddress = selection.Substring(3).Trim();
+
+                    // check if IP is valid
+                    if (!System.Net.IPAddress.TryParse(ipAddress, out _))
+                    {
+                        Console.WriteLine("Invalid IP address format.");
+                        return;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"UDP Streamer selected with IP: {ipAddress}");
+                        // Start UDP sender
+                        udpSender.StartSending(ipAddress, capture);
+
+                        return;
+                    }
+
+                    return;
+                }
+
+                if (selection.ToUpper().StartsWith("CL"))
+                {
+                    // Handle UDP Client
+                    Console.WriteLine("UDP Client selected");
+
+                    string deviceID = selection.Substring(3).Trim();
+
+                    // check if ID is valid
+                    if (!int.TryParse(deviceID, out deviceIndex) || deviceIndex < 0 || deviceIndex >= devices.Count)
+                    {
+                        Console.WriteLine("Invalid device selection.");
+                        return;
+                    }
+
+                    udpReceiver.StartReceiving(deviceIndex);
+                    return;
+
+                }
+
+                if (!int.TryParse(selection, out deviceIndex) ||
                     deviceIndex < 0 || deviceIndex >= devices.Count)
                 {
                     Console.WriteLine("Invalid device selection.");
@@ -96,6 +146,12 @@ class AudioMirror
 
             var targetDevice = devices[deviceIndex];
             Console.WriteLine($"Mirroring audio to: {targetDevice.FriendlyName}");
+            Console.WriteLine($"Audio settings: " +
+                $"CH:{targetDevice.AudioClient.MixFormat.Channels} " +
+                $"Rate: {targetDevice.AudioClient.MixFormat.SampleRate} " +
+                $"Bits: {targetDevice.AudioClient.MixFormat.BitsPerSample} " +
+                $"Encoder: {targetDevice.AudioClient.MixFormat.Encoding}");
+
             Console.WriteLine("Press any key to stop...\n");
 
             // Setup loopback capture (captures system audio)
